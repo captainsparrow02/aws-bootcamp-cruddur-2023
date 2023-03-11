@@ -14,6 +14,8 @@ from services.messages import *
 from services.create_message import *
 from services.show_activity import *
 
+from lib.cognito_jwt_token import CognitoJwtToken
+
 # Honeycomb
 from opentelemetry import trace
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
@@ -57,6 +59,12 @@ tracer = trace.get_tracer(__name__)
 
 app = Flask(__name__)
 
+cognito_jwt_token= CognitoJwtToken(
+  user_pool_id = os.getenv('AWS_COGNITO_POOL_ID'), 
+  user_pool_client_id = os.getenv('AWS_COGNITO_USER_POOL_CLIENT_ID'), 
+  region=os.getenv('AWS_DEFAULT_REGION')
+  )
+
 # XRayMiddleware(app, xray_recorder)
 # Honeycomb
 # Initialize automatic instrumentation with Flask
@@ -69,8 +77,8 @@ origins = [frontend, backend]
 cors = CORS(
   app, 
   resources={r"/api/*": {"origins": origins}},
-  expose_headers="location,link",
-  allow_headers="content-type,if-modified-since",
+  headers=['Content-Type', 'Authorization'], 
+  expose_headers='Authorization',
   methods="OPTIONS,GET,HEAD,POST"
 )
 
@@ -117,6 +125,11 @@ def data_create_message():
 
 @app.route("/api/activities/home", methods=['GET'])
 def data_home():
+  access_token = cognito_jwt_token.extract_access_token(request.headers)
+  try:
+      claims = token_service.verify(access_token)
+  except TokenVerifyError as e:
+      _ = request.data
   data = HomeActivities.run()
   return data, 200
 
